@@ -4,14 +4,13 @@
     "lib": ["ES2022"],
     "module": "ES2022",
     "moduleResolution": "Bundler",
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"],
-    "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
+    "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true
   },
-  "include": ["src", "test", "worker-configuration.d.ts"]
+  "include": ["./**/*.ts", "../src/youtube/client.ts"]
 }

@@ -58,6 +58,20 @@ export async function listVideosForPlaylist(db: D1Database, playlistId: number):
   return result.results;
 }
 
+export interface PlaylistWithVideos extends PlaylistRow {
+  videos: VideoRow[];
+}
+
+export async function listPlaylistsWithVideos(db: D1Database): Promise<PlaylistWithVideos[]> {
+  const playlists = await listPlaylists(db);
+  return Promise.all(
+    playlists.map(async (playlist) => ({
+      ...playlist,
+      videos: await listVideosForPlaylist(db, playlist.id),
+    })),
+  );
+}
+
 export async function getExistingVideoIds(db: D1Database, playlistId: number): Promise<Set<string>> {
   const result = await db
     .prepare("SELECT videoid FROM videos WHERE playlist_id = ?")

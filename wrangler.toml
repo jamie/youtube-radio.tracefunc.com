@@ -1,0 +1,20 @@
+name = "youtube-feed"
+main = "src/index.ts"
+compatibility_date = "2026-09-28"
+
+[observability]
+enabled = true
+
+# Sync new playlist videos every 4 hours; sweep watched videos for cleanup once daily.
+# The scheduled handler in src/index.ts dispatches on event.cron to tell these apart.
+[triggers]
+crons = ["0 */4 * * *", "0 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "youtube-feed"
+database_id = "REPLACE_ME_RUN_WRANGLER_D1_CREATE"
+
+# YOUTUBE_API_KEY is a secret, not a var — set it with:
+#   wrangler secret put YOUTUBE_API_KEY
+# and for local dev, put it in .dev.vars (see .dev.vars.example).

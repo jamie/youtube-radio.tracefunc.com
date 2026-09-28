@@ -1,4 +1,4 @@
--- D1 schema for the Cloudflare Worker rewrite.
+-- Migration number: 0000 	 2026-09-28T00:00:00.000Z
 -- Fresh start: no migration from the Rails app's SQLite data (see design discussion).
 
 CREATE TABLE playlists (

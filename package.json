@@ -7,15 +7,15 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "db:migrate:local": "wrangler d1 execute youtube-feed --local --file=./schema.sql",
-    "db:migrate:remote": "wrangler d1 execute youtube-feed --remote --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 migrations apply youtube-feed --local",
+    "db:migrate:remote": "wrangler d1 migrations apply youtube-feed --remote",
     "debug:playlist": "tsx scripts/debug-playlist.ts"
   },
   "dependencies": {
     "hono": "^4.6.14"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/vitest-plugin": "^1.3.1",
     "@cloudflare/workers-types": "^5.20260928.1",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",

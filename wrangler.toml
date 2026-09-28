@@ -6,7 +6,7 @@ compatibility_date = "2026-08-22"
 enabled = true
 
 # Sync new playlist videos every 4 hours; sweep watched videos for cleanup once daily.
-# The scheduled handler in src/index.ts dispatches on event.cron to tell these apart.
+# The scheduled handler in src/index.tsx dispatches on event.cron to tell these apart.
 [triggers]
 crons = ["0 */4 * * *", "0 3 * * *"]
 

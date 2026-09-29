@@ -4,6 +4,12 @@ const API_BASE = "https://www.googleapis.com/youtube/v3";
 // so this is 5000 videos — far beyond anything a personal feed subscribes to.
 const MAX_PAGES = 100;
 
+// Hard cap on how far back the crawler will pull: some subscribed playlists
+// (uploads playlists in particular) go back to 2014, far beyond anything
+// meant to show up in a "new episodes" feed. Nothing published before this
+// is ever fetched, for a new subscription or an existing one.
+export const MIN_PUBLISHED_AT = "2026-08-01T00:00:00Z";
+
 export class YouTubeApiError extends Error {
   constructor(
     message: string,
@@ -111,6 +117,11 @@ export async function fetchAllPlaylistItems(
       // Deleted/private videos still show up as playlist items but without
       // real snippet data — skip them rather than storing garbage rows.
       if (!videoId || !title || !publishedAt || title === "Deleted video" || title === "Private video") {
+        continue;
+      }
+      // publishedAt is always a full ISO 8601 UTC timestamp, so string
+      // comparison against MIN_PUBLISHED_AT sorts correctly.
+      if (publishedAt < MIN_PUBLISHED_AT) {
         continue;
       }
       items.push({ videoId, title, publishedAt });

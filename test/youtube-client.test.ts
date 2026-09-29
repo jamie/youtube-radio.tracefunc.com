@@ -3,6 +3,7 @@ import {
   extractPlaylistId,
   fetchAllPlaylistItems,
   fetchPlaylistMetadata,
+  MIN_PUBLISHED_AT,
   YouTubeApiError,
 } from "../src/youtube/client";
 
@@ -88,7 +89,7 @@ describe("fetchAllPlaylistItems", () => {
               snippet: {
                 resourceId: { videoId: "v1" },
                 title: "Episode 1",
-                publishedAt: "2026-01-01T00:00:00Z",
+                publishedAt: "2026-08-01T00:00:00Z",
               },
             },
           ],
@@ -101,7 +102,7 @@ describe("fetchAllPlaylistItems", () => {
               snippet: {
                 resourceId: { videoId: "v2" },
                 title: "Episode 2",
-                publishedAt: "2026-02-01T00:00:00Z",
+                publishedAt: "2026-08-15T00:00:00Z",
               },
             },
           ],
@@ -114,8 +115,8 @@ describe("fetchAllPlaylistItems", () => {
     const secondCallUrl = new URL(fetchSpy.mock.calls[1]![0] as string);
     expect(secondCallUrl.searchParams.get("pageToken")).toBe("page2");
     expect(items).toEqual([
-      { videoId: "v1", title: "Episode 1", publishedAt: "2026-01-01T00:00:00Z" },
-      { videoId: "v2", title: "Episode 2", publishedAt: "2026-02-01T00:00:00Z" },
+      { videoId: "v1", title: "Episode 1", publishedAt: "2026-08-01T00:00:00Z" },
+      { videoId: "v2", title: "Episode 2", publishedAt: "2026-08-15T00:00:00Z" },
     ]);
   });
 
@@ -127,28 +128,28 @@ describe("fetchAllPlaylistItems", () => {
             snippet: {
               resourceId: { videoId: "v1" },
               title: "Deleted video",
-              publishedAt: "2026-01-01T00:00:00Z",
+              publishedAt: "2026-08-01T00:00:00Z",
             },
           },
           {
             snippet: {
               resourceId: { videoId: "v2" },
               title: "Private video",
-              publishedAt: "2026-01-01T00:00:00Z",
+              publishedAt: "2026-08-01T00:00:00Z",
             },
           },
           {
             snippet: {
               resourceId: {},
               title: "Missing video id",
-              publishedAt: "2026-01-01T00:00:00Z",
+              publishedAt: "2026-08-01T00:00:00Z",
             },
           },
           {
             snippet: {
               resourceId: { videoId: "v4" },
               title: "A real episode",
-              publishedAt: "2026-01-01T00:00:00Z",
+              publishedAt: "2026-08-01T00:00:00Z",
             },
           },
         ],
@@ -158,7 +159,41 @@ describe("fetchAllPlaylistItems", () => {
     const items = await fetchAllPlaylistItems("key", "PLxyz");
 
     expect(items).toEqual([
-      { videoId: "v4", title: "A real episode", publishedAt: "2026-01-01T00:00:00Z" },
+      { videoId: "v4", title: "A real episode", publishedAt: "2026-08-01T00:00:00Z" },
     ]);
+  });
+
+  it("skips videos published before MIN_PUBLISHED_AT", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        items: [
+          {
+            snippet: {
+              resourceId: { videoId: "old" },
+              title: "Old episode",
+              publishedAt: "2014-03-01T00:00:00Z",
+            },
+          },
+          {
+            snippet: {
+              resourceId: { videoId: "borderline" },
+              title: "Right on the cutoff",
+              publishedAt: MIN_PUBLISHED_AT,
+            },
+          },
+          {
+            snippet: {
+              resourceId: { videoId: "new" },
+              title: "New episode",
+              publishedAt: "2026-08-15T00:00:00Z",
+            },
+          },
+        ],
+      }),
+    );
+
+    const items = await fetchAllPlaylistItems("key", "PLxyz");
+
+    expect(items.map((item) => item.videoId)).toEqual(["borderline", "new"]);
   });
 });

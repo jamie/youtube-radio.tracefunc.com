@@ -27,12 +27,13 @@ describe("subscribeToPlaylist", () => {
           jsonResponse({ items: [{ snippet: { title: "ASOT", channelTitle: "Armin van Buuren" } }] }),
         );
       }
-      // 15 videos, published one day apart — only the newest 10 should be kept.
+      // 15 videos, published one day apart (all after the MIN_PUBLISHED_AT
+      // cutoff) — only the newest 10 should be kept.
       const items = Array.from({ length: 15 }, (_, i) => ({
         snippet: {
           resourceId: { videoId: `v${i}` },
           title: `Episode ${i}`,
-          publishedAt: new Date(2026, 0, i + 1).toISOString(),
+          publishedAt: new Date(Date.UTC(2026, 7, i + 1)).toISOString(),
         },
       }));
       return Promise.resolve(jsonResponse({ items }));

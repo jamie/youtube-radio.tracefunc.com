@@ -2,13 +2,13 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
   createPlaylist,
-  deleteVideos,
   findCleanupEligibleVideos,
   getExistingVideoIds,
   getVideoByVideoId,
   insertNewVideos,
   listVideosForPlaylist,
   recordProgress,
+  softDeleteVideos,
 } from "../src/db/queries";
 
 async function makePlaylist(youtubePlaylistId: string) {
@@ -117,8 +117,8 @@ describe("findCleanupEligibleVideos", () => {
   });
 });
 
-describe("deleteVideos", () => {
-  it("removes the given rows and leaves others untouched", async () => {
+describe("softDeleteVideos", () => {
+  it("sets deleted_at rather than removing the row, and hides it from listings", async () => {
     const playlist = await makePlaylist("PL_delete");
     await insertNewVideos(env.DB, playlist.id, [
       { videoId: "keep", title: "Keep", publishedAt: "2026-01-01T00:00:00Z" },
@@ -126,9 +126,16 @@ describe("deleteVideos", () => {
     ]);
     const toRemove = await getVideoByVideoId(env.DB, "remove");
 
-    await deleteVideos(env.DB, [toRemove!.id]);
+    await softDeleteVideos(env.DB, [toRemove!.id]);
 
-    expect(await getVideoByVideoId(env.DB, "remove")).toBeNull();
-    expect(await getVideoByVideoId(env.DB, "keep")).not.toBeNull();
+    const removed = await getVideoByVideoId(env.DB, "remove");
+    expect(removed?.deleted_at).not.toBeNull();
+
+    const videos = await listVideosForPlaylist(env.DB, playlist.id);
+    expect(videos.map((v) => v.videoid)).toEqual(["keep"]);
+
+    // The videoid stays known so a future sync can't mistake it for new.
+    const existingIds = await getExistingVideoIds(env.DB, playlist.id);
+    expect(existingIds).toContain("remove");
   });
 });

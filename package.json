@@ -7,8 +7,8 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
-    "db:migrate:local": "wrangler d1 migrations apply youtube-feed --local",
-    "db:migrate:remote": "wrangler d1 migrations apply youtube-feed --remote",
+    "db:migrate:local": "wrangler d1 migrations apply radio-tracefunc-com --local",
+    "db:migrate:remote": "wrangler d1 migrations apply radio-tracefunc-com --remote",
     "debug:playlist": "tsx scripts/debug-playlist.ts"
   },
   "dependencies": {

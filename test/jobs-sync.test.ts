@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPlaylist, listVideosForPlaylist } from "../src/db/queries";
+import { createPlaylist, getVideoByVideoId, listVideosForPlaylist, softDeleteVideos } from "../src/db/queries";
 import { syncAllPlaylists, syncPlaylist } from "../src/jobs/sync";
 
 // D1 storage is isolated per test FILE, not per test case, and `videoid` is
@@ -46,7 +46,7 @@ describe("syncPlaylist", () => {
 
     // Seed one video that already exists, as if a previous sync found it.
     fetchSpy.mockResolvedValueOnce(
-      playlistItemsResponse([{ videoId: "old", title: "Old", publishedAt: "2026-01-01T00:00:00Z" }]),
+      playlistItemsResponse([{ videoId: "old", title: "Old", publishedAt: "2026-08-01T00:00:00Z" }]),
     );
     await syncPlaylist(env.DB, "key", playlist);
     fetchSpy.mockClear();
@@ -54,8 +54,8 @@ describe("syncPlaylist", () => {
     // Live playlist now has the old video plus a new one.
     fetchSpy.mockResolvedValueOnce(
       playlistItemsResponse([
-        { videoId: "old", title: "Old", publishedAt: "2026-01-01T00:00:00Z" },
-        { videoId: "new", title: "New", publishedAt: "2026-02-01T00:00:00Z" },
+        { videoId: "old", title: "Old", publishedAt: "2026-08-01T00:00:00Z" },
+        { videoId: "new", title: "New", publishedAt: "2026-08-15T00:00:00Z" },
       ]),
     );
 
@@ -64,6 +64,35 @@ describe("syncPlaylist", () => {
     expect(result.inserted).toBe(1);
     const videos = await listVideosForPlaylist(env.DB, playlist.id);
     expect(videos.map((v) => v.videoid).sort()).toEqual(["new", "old"]);
+  });
+
+  it("does not resurrect a soft-deleted video that's still in the live playlist", async () => {
+    const playlist = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLsyncdeleted",
+      url: "https://youtube.com/playlist?list=PLsyncdeleted",
+      title: "Test",
+      channel: "Test",
+    });
+
+    fetchSpy.mockResolvedValueOnce(
+      playlistItemsResponse([{ videoId: "pruned", title: "Pruned", publishedAt: "2026-08-01T00:00:00Z" }]),
+    );
+    await syncPlaylist(env.DB, "key", playlist);
+    fetchSpy.mockClear();
+
+    const pruned = await getVideoByVideoId(env.DB, "pruned");
+    await softDeleteVideos(env.DB, [pruned!.id]);
+
+    // YouTube still reports it (nothing was actually removed from the real
+    // playlist) — the next sync must not treat it as new again.
+    fetchSpy.mockResolvedValueOnce(
+      playlistItemsResponse([{ videoId: "pruned", title: "Pruned", publishedAt: "2026-08-01T00:00:00Z" }]),
+    );
+    const result = await syncPlaylist(env.DB, "key", playlist);
+
+    expect(result.inserted).toBe(0);
+    expect(await listVideosForPlaylist(env.DB, playlist.id)).toEqual([]);
+    expect((await getVideoByVideoId(env.DB, "pruned"))?.deleted_at).not.toBeNull();
   });
 });
 
@@ -104,7 +133,7 @@ describe("syncAllPlaylists", () => {
       }
       if (playlistId === "PLgood") {
         return Promise.resolve(
-          playlistItemsResponse([{ videoId: "good_v1", title: "Good V1", publishedAt: "2026-01-01T00:00:00Z" }]),
+          playlistItemsResponse([{ videoId: "good_v1", title: "Good V1", publishedAt: "2026-08-01T00:00:00Z" }]),
         );
       }
       return Promise.resolve(playlistItemsResponse([]));

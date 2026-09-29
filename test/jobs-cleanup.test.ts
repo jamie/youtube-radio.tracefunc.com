@@ -1,10 +1,10 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { createPlaylist, getVideoByVideoId, insertNewVideos } from "../src/db/queries";
+import { createPlaylist, getVideoByVideoId, insertNewVideos, listVideosForPlaylist } from "../src/db/queries";
 import { runCleanup } from "../src/jobs/cleanup";
 
 describe("runCleanup", () => {
-  it("deletes only videos past the grace period and reports what it deleted", async () => {
+  it("soft-deletes only videos past the grace period and reports what it deleted", async () => {
     const playlist = await createPlaylist(env.DB, {
       youtubePlaylistId: "PLcleanup",
       url: "https://youtube.com/playlist?list=PLcleanup",
@@ -28,7 +28,10 @@ describe("runCleanup", () => {
     const result = await runCleanup(env.DB, 7);
 
     expect(result.deleted.map((v) => v.videoid)).toEqual(["done"]);
-    expect(await getVideoByVideoId(env.DB, "done")).toBeNull();
-    expect(await getVideoByVideoId(env.DB, "in_progress")).not.toBeNull();
+    expect((await getVideoByVideoId(env.DB, "done"))?.deleted_at).not.toBeNull();
+    expect((await getVideoByVideoId(env.DB, "in_progress"))?.deleted_at).toBeNull();
+
+    const videos = await listVideosForPlaylist(env.DB, playlist.id);
+    expect(videos.map((v) => v.videoid)).toEqual(["in_progress"]);
   });
 });

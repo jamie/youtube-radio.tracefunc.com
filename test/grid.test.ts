@@ -13,6 +13,7 @@ function video(overrides: Partial<VideoRow>): VideoRow {
     progress_seconds: 0,
     last_watched_at: null,
     created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
     ...overrides,
   };
 }

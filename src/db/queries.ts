@@ -17,6 +17,7 @@ export interface VideoRow {
   progress_seconds: number;
   last_watched_at: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export interface NewPlaylist {
@@ -52,7 +53,7 @@ export async function listPlaylists(db: D1Database): Promise<PlaylistRow[]> {
 
 export async function listVideosForPlaylist(db: D1Database, playlistId: number): Promise<VideoRow[]> {
   const result = await db
-    .prepare("SELECT * FROM videos WHERE playlist_id = ? ORDER BY published_at ASC")
+    .prepare("SELECT * FROM videos WHERE playlist_id = ? AND deleted_at IS NULL ORDER BY published_at ASC")
     .bind(playlistId)
     .all<VideoRow>();
   return result.results;
@@ -72,6 +73,10 @@ export async function listPlaylistsWithVideos(db: D1Database): Promise<PlaylistW
   );
 }
 
+/**
+ * Deliberately not filtered by deleted_at: a soft-deleted video must still
+ * count as "known" so a sync doesn't see its id as new and re-insert it.
+ */
 export async function getExistingVideoIds(db: D1Database, playlistId: number): Promise<Set<string>> {
   const result = await db
     .prepare("SELECT videoid FROM videos WHERE playlist_id = ?")
@@ -140,7 +145,8 @@ export async function findCleanupEligibleVideos(
   const result = await db
     .prepare(
       `SELECT * FROM videos
-       WHERE duration_seconds IS NOT NULL
+       WHERE deleted_at IS NULL
+         AND duration_seconds IS NOT NULL
          AND duration_seconds > 0
          AND progress_seconds >= duration_seconds * ?
          AND last_watched_at IS NOT NULL
@@ -151,11 +157,16 @@ export async function findCleanupEligibleVideos(
   return result.results;
 }
 
-export async function deleteVideos(db: D1Database, ids: number[]): Promise<void> {
+/**
+ * Soft-deletes: sets deleted_at rather than removing the row, so the
+ * videoid stays known to getExistingVideoIds and the sync job's diff can't
+ * mistake a pruned video for a new one and re-insert it.
+ */
+export async function softDeleteVideos(db: D1Database, ids: number[]): Promise<void> {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => "?").join(", ");
   await db
-    .prepare(`DELETE FROM videos WHERE id IN (${placeholders})`)
+    .prepare(`UPDATE videos SET deleted_at = datetime('now') WHERE id IN (${placeholders})`)
     .bind(...ids)
     .run();
 }

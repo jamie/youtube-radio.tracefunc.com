@@ -1,5 +1,11 @@
 import type { FC } from "hono/jsx";
-import { buildWeekColumns, groupVideosByWeek, type PlaylistWithVideos } from "../grid";
+import {
+  buildWeekColumns,
+  formatWeekLabel,
+  groupVideosByDate,
+  groupVideosByWeek,
+  type PlaylistWithVideos,
+} from "../grid";
 import { computeProgressGlyph } from "../progress-glyph";
 import type { VideoRow } from "../db/queries";
 
@@ -14,10 +20,22 @@ const VideoIndicator: FC<{ video: VideoRow }> = ({ video }) => {
       title={video.title}
     >
       <span class={`video-glyph ${glyph.state}`}>{glyph.char}</span>
-      <span class="video-title">{video.title}</span>
     </button>
   );
 };
+
+// Videos sharing a publish date are rendered on one line, an nbsp apart, so
+// a busy day doesn't crowd its neighbors.
+const VideoDay: FC<{ videos: VideoRow[] }> = ({ videos }) => (
+  <div class="video-day">
+    {videos.map((video, i) => (
+      <>
+        {i > 0 && " "}
+        <VideoIndicator video={video} />
+      </>
+    ))}
+  </div>
+);
 
 export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => {
   const weeks = buildWeekColumns(playlists);
@@ -37,7 +55,7 @@ export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => 
             <tr>
               <th>Playlist</th>
               {weeks.map((week) => (
-                <th>{week}</th>
+                <th>{formatWeekLabel(week)}</th>
               ))}
             </tr>
           </thead>
@@ -47,13 +65,16 @@ export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => 
               return (
                 <tr>
                   <th>{playlist.title ?? playlist.youtube_playlist_id}</th>
-                  {weeks.map((week) => (
-                    <td>
-                      {(grouped.get(week) ?? []).map((video) => (
-                        <VideoIndicator video={video} />
-                      ))}
-                    </td>
-                  ))}
+                  {weeks.map((week) => {
+                    const byDate = groupVideosByDate(grouped.get(week) ?? []);
+                    return (
+                      <td>
+                        {[...byDate.entries()].map(([date, videos]) => (
+                          <VideoDay key={date} videos={videos} />
+                        ))}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

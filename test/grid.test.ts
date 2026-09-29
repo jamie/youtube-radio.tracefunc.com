@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildWeekColumns, groupVideosByWeek, weekKey, type PlaylistWithVideos } from "../src/grid";
+import {
+  buildWeekColumns,
+  dateKey,
+  formatWeekLabel,
+  groupVideosByDate,
+  groupVideosByWeek,
+  weekKey,
+  type PlaylistWithVideos,
+} from "../src/grid";
 import type { VideoRow } from "../src/db/queries";
 
 function video(overrides: Partial<VideoRow>): VideoRow {
@@ -61,5 +69,33 @@ describe("buildWeekColumns / groupVideosByWeek", () => {
     const grouped = groupVideosByWeek(playlists[0]!);
     expect(grouped.get("2025-12-29")?.map((v) => v.videoid)).toEqual(["a", "b"]);
     expect(grouped.has("2026-01-12")).toBe(false);
+  });
+});
+
+describe("formatWeekLabel", () => {
+  it("drops the year", () => {
+    expect(formatWeekLabel("2026-08-24")).toBe("08-24");
+  });
+});
+
+describe("dateKey", () => {
+  it("returns just the calendar date", () => {
+    expect(dateKey("2026-08-15T09:30:00Z")).toBe("2026-08-15");
+  });
+});
+
+describe("groupVideosByDate", () => {
+  it("groups same-date videos together while preserving order", () => {
+    const videos = [
+      video({ id: 1, videoid: "a", published_at: "2026-08-15T09:00:00Z" }),
+      video({ id: 2, videoid: "b", published_at: "2026-08-15T20:00:00Z" }),
+      video({ id: 3, videoid: "c", published_at: "2026-08-16T09:00:00Z" }),
+    ];
+
+    const grouped = groupVideosByDate(videos);
+
+    expect([...grouped.keys()]).toEqual(["2026-08-15", "2026-08-16"]);
+    expect(grouped.get("2026-08-15")?.map((v) => v.videoid)).toEqual(["a", "b"]);
+    expect(grouped.get("2026-08-16")?.map((v) => v.videoid)).toEqual(["c"]);
   });
 });

@@ -53,9 +53,9 @@ export const PLAYER_SCRIPT = `
       }, PROGRESS_INTERVAL_MS);
     } else {
       stopProgressTimer();
-      if (event.data === 0) {
-        // Flush a final report on end so 95%+ is recorded even if the last
-        // periodic tick landed a few seconds before completion.
+      if (event.data === 0 || event.data === 2) {
+        // Flush a report on end/pause so progress isn't missed by up to
+        // PROGRESS_INTERVAL_MS if the tab closes shortly after.
         reportProgress(true);
       }
     }

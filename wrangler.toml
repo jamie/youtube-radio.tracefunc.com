@@ -1,4 +1,4 @@
-name = "youtube-feed"
+name = "radio-tracefunc-com"
 main = "src/index.tsx"
 compatibility_date = "2026-08-22"
 
@@ -12,8 +12,8 @@ crons = ["0 */4 * * *", "0 3 * * *"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "youtube-feed"
-database_id = "REPLACE_ME_RUN_WRANGLER_D1_CREATE"
+database_name = "radio-tracefunc-com"
+database_id = "38e319f0-1956-45d0-b745-b59c6424c99b"
 
 # YOUTUBE_API_KEY is a secret, not a var — set it with:
 #   wrangler secret put YOUTUBE_API_KEY

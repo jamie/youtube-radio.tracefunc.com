@@ -12,9 +12,10 @@ export const Layout: FC<PropsWithChildren> = ({ children }) => (
         table { border-collapse: collapse; width: 100%; }
         th, td { border: 1px solid #ddd; padding: 0.4rem; vertical-align: top; text-align: left; }
         th { background: #f5f5f5; font-weight: 600; white-space: nowrap; }
-        .video-day { white-space: nowrap; padding: 0.15rem 0; }
-        .video { display: inline-block; cursor: pointer; border: none; background: none; padding: 0;
-                 font-size: 1rem; }
+        .video-day { display: flex; flex-wrap: nowrap; align-items: center; gap: 0.25rem;
+                     white-space: nowrap; padding: 0.15rem 0; }
+        .video { display: inline-block; flex: none; cursor: pointer; border: none; background: none;
+                 padding: 0; font-size: 1rem; }
         .video-glyph { display: inline-block; width: 1.2em; border-radius: 2px; }
         .video-glyph.unwatched { color: #bbb; }
         .video-glyph.in-progress { color: #d18b00; }

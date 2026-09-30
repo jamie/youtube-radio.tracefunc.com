@@ -24,15 +24,12 @@ const VideoIndicator: FC<{ video: VideoRow }> = ({ video }) => {
   );
 };
 
-// Videos sharing a publish date are rendered on one line, an nbsp apart, so
-// a busy day doesn't crowd its neighbors.
+// Videos sharing a publish date are rendered on one line (a flex row that
+// never wraps), so a busy day doesn't crowd its neighbors.
 const VideoDay: FC<{ videos: VideoRow[] }> = ({ videos }) => (
   <div class="video-day">
-    {videos.map((video, i) => (
-      <>
-        {i > 0 && " "}
-        <VideoIndicator video={video} />
-      </>
+    {videos.map((video) => (
+      <VideoIndicator key={video.videoid} video={video} />
     ))}
   </div>
 );

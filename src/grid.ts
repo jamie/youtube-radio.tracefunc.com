@@ -42,27 +42,3 @@ export function groupVideosByWeek(playlist: PlaylistWithVideos): Map<string, Vid
 export function formatWeekLabel(week: string): string {
   return week.slice(5);
 }
-
-/** The ISO (UTC) calendar date of `isoDate`, e.g. "2026-08-15T09:00:00Z" -> "2026-08-15". */
-export function dateKey(isoDate: string): string {
-  return isoDate.slice(0, 10);
-}
-
-/**
- * Groups an already-ordered list of videos (e.g. one week column's videos)
- * by exact publish date, preserving order. Multiple videos sharing a date
- * are meant to be rendered together on one line.
- */
-export function groupVideosByDate(videos: VideoRow[]): Map<string, VideoRow[]> {
-  const groups = new Map<string, VideoRow[]>();
-  for (const video of videos) {
-    const key = dateKey(video.published_at);
-    const existing = groups.get(key);
-    if (existing) {
-      existing.push(video);
-    } else {
-      groups.set(key, [video]);
-    }
-  }
-  return groups;
-}

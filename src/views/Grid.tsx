@@ -1,11 +1,5 @@
 import type { FC } from "hono/jsx";
-import {
-  buildWeekColumns,
-  formatWeekLabel,
-  groupVideosByDate,
-  groupVideosByWeek,
-  type PlaylistWithVideos,
-} from "../grid";
+import { buildWeekColumns, formatWeekLabel, groupVideosByWeek, type PlaylistWithVideos } from "../grid";
 import { computeProgressGlyph } from "../progress-glyph";
 import type { VideoRow } from "../db/queries";
 
@@ -24,10 +18,9 @@ const VideoIndicator: FC<{ video: VideoRow }> = ({ video }) => {
   );
 };
 
-// Videos sharing a publish date are rendered on one line (a flex row that
-// never wraps), so a busy day doesn't crowd its neighbors.
-const VideoDay: FC<{ videos: VideoRow[] }> = ({ videos }) => (
-  <div class="video-day">
+// A week's videos for one playlist, all in a single wrapping flex row.
+const VideoCell: FC<{ videos: VideoRow[] }> = ({ videos }) => (
+  <div class="video-cell">
     {videos.map((video) => (
       <VideoIndicator key={video.videoid} video={video} />
     ))}
@@ -62,16 +55,11 @@ export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => 
               return (
                 <tr>
                   <th>{playlist.title ?? playlist.youtube_playlist_id}</th>
-                  {weeks.map((week) => {
-                    const byDate = groupVideosByDate(grouped.get(week) ?? []);
-                    return (
-                      <td>
-                        {[...byDate.entries()].map(([date, videos]) => (
-                          <VideoDay key={date} videos={videos} />
-                        ))}
-                      </td>
-                    );
-                  })}
+                  {weeks.map((week) => (
+                    <td>
+                      <VideoCell videos={grouped.get(week) ?? []} />
+                    </td>
+                  ))}
                 </tr>
               );
             })}

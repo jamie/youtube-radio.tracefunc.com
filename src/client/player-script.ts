@@ -62,11 +62,60 @@ export const PLAYER_SCRIPT = `
     loadVideo(next.videoId, next.startSeconds, next.playlistId);
   }
 
-  function reportProgress(isFinal) {
+  // Mirrors progress-glyph.ts's classification so the grid can react
+  // immediately, without waiting on a round trip and a full page reload.
+  var PROGRESS_BLOCKS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+  var DONE_THRESHOLD = 0.95;
+
+  function computeGlyph(progressSeconds, durationSeconds) {
+    if (!durationSeconds || durationSeconds <= 0) {
+      return { char: PROGRESS_BLOCKS[0], state: "unwatched" };
+    }
+    var percent = Math.min(1, Math.max(0, progressSeconds / durationSeconds));
+    if (percent >= DONE_THRESHOLD) {
+      return { char: PROGRESS_BLOCKS[7], state: "done" };
+    }
+    if (percent === 0) {
+      return { char: PROGRESS_BLOCKS[0], state: "unwatched" };
+    }
+    var level = Math.min(7, Math.max(1, Math.round(percent * 8)));
+    return { char: PROGRESS_BLOCKS[level - 1], state: "in-progress" };
+  }
+
+  function findVideoElement(videoId) {
+    var elements = document.querySelectorAll("[data-video-id]");
+    for (var i = 0; i < elements.length; i++) {
+      if (elements[i].getAttribute("data-video-id") === videoId) return elements[i];
+    }
+    return null;
+  }
+
+  // Updates the grid's own bookkeeping (data-progress-seconds, used to
+  // resume playback and to decide what's "incomplete" for auto-queueing)
+  // and its visual glyph, so both reflect what we've just told the server
+  // without waiting for a page reload.
+  function updateLocalProgress(videoId, currentTime, duration) {
+    var el = findVideoElement(videoId);
+    if (!el) return;
+    el.setAttribute("data-progress-seconds", String(currentTime));
+    var glyph = computeGlyph(currentTime, duration);
+    var glyphEl = el.querySelector(".video-glyph");
+    if (glyphEl) {
+      glyphEl.className = "video-glyph " + glyph.state;
+      glyphEl.textContent = glyph.char;
+    }
+  }
+
+  // "forceEnded" reports (and reflects locally) the video as fully watched,
+  // regardless of the player's reported currentTime — used when playback
+  // reaches the end, so the just-finished video isn't picked as "incomplete"
+  // and re-queued against itself.
+  function reportProgress(isFinal, forceEnded) {
     if (!currentVideoId || !player || typeof player.getDuration !== "function") return;
     var duration = player.getDuration();
-    var currentTime = player.getCurrentTime();
     if (!duration) return; // duration is 0 for a moment right after loadVideoById
+    var currentTime = forceEnded ? duration : player.getCurrentTime();
+    updateLocalProgress(currentVideoId, currentTime, duration);
     fetch("/api/progress", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -93,13 +142,16 @@ export const PLAYER_SCRIPT = `
       }, PROGRESS_INTERVAL_MS);
     } else {
       stopProgressTimer();
-      if (event.data === 0 || event.data === 2) {
-        // Flush a report on end/pause so progress isn't missed by up to
+      if (event.data === 0) {
+        // Natural end: mark the video fully watched (rather than whatever
+        // currentTime the player last reported) so it isn't re-queued as
+        // its own "next incomplete video".
+        reportProgress(true, true);
+        playNext();
+      } else if (event.data === 2) {
+        // Flush a report on pause so progress isn't missed by up to
         // PROGRESS_INTERVAL_MS if the tab closes shortly after.
         reportProgress(true);
-      }
-      if (event.data === 0) {
-        playNext();
       }
     }
   }
@@ -128,6 +180,11 @@ export const PLAYER_SCRIPT = `
     var videoId = target.getAttribute("data-video-id");
     var startSeconds = parseFloat(target.getAttribute("data-progress-seconds") || "0");
     var playlistId = target.getAttribute("data-playlist-id");
+    if (currentVideoId && currentVideoId !== videoId) {
+      // Preempting whatever's currently playing — sync its progress before
+      // switching away, rather than waiting for the next 30s tick.
+      reportProgress(true);
+    }
     loadVideo(videoId, startSeconds, playlistId);
   });
 

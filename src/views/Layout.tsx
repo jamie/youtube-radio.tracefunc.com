@@ -5,7 +5,7 @@ export const Layout: FC<PropsWithChildren> = ({ children }) => (
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>youtube-feed</title>
+      <title>Radio YT</title>
       <style>{`
         body { font-family: system-ui, sans-serif; margin: 1.5rem; }
         #player { margin-bottom: 1.5rem; }

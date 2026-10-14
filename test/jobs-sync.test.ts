@@ -1,6 +1,12 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPlaylist, getVideoByVideoId, listVideosForPlaylist, softDeleteVideos } from "../src/db/queries";
+import {
+  createPlaylist,
+  getPlaylistById,
+  getVideoByVideoId,
+  listVideosForPlaylist,
+  softDeleteVideos,
+} from "../src/db/queries";
 import { syncAllPlaylists, syncPlaylist } from "../src/jobs/sync";
 
 // D1 storage is isolated per test FILE, not per test case, and `videoid` is
@@ -148,5 +154,15 @@ describe("syncAllPlaylists", () => {
     expect(goodResult?.error).toBeUndefined();
     expect(badResult?.inserted).toBe(0);
     expect(badResult?.error).toBeDefined();
+
+    // The failure is persisted against the playlist, not just returned in
+    // the in-memory result — that's what makes it diagnosable after the
+    // fact instead of only visible in that one console.error line.
+    const goodRow = await getPlaylistById(env.DB, good.id);
+    const badRow = await getPlaylistById(env.DB, bad.id);
+    expect(goodRow?.last_sync_error).toBeNull();
+    expect(goodRow?.last_synced_at).not.toBeNull();
+    expect(badRow?.last_sync_error).toContain("403");
+    expect(badRow?.last_synced_at).not.toBeNull();
   });
 });

@@ -1,4 +1,10 @@
-import { getExistingVideoIds, insertNewVideos, listPlaylists, type PlaylistRow } from "../db/queries";
+import {
+  getExistingVideoIds,
+  insertNewVideos,
+  listPlaylists,
+  recordSyncAttempt,
+  type PlaylistRow,
+} from "../db/queries";
 import { fetchAllPlaylistItems } from "../youtube/client";
 
 export interface SyncResult {
@@ -44,13 +50,17 @@ export async function syncAllPlaylists(db: D1Database, apiKey: string): Promise<
   return Promise.all(
     playlists.map(async (playlist) => {
       try {
-        return await syncPlaylist(db, apiKey, playlist);
+        const result = await syncPlaylist(db, apiKey, playlist);
+        await recordSyncAttempt(db, playlist.id, null);
+        return result;
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await recordSyncAttempt(db, playlist.id, message);
         return {
           playlistId: playlist.id,
           playlistTitle: playlist.title,
           inserted: 0,
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
         };
       }
     }),

@@ -5,6 +5,8 @@ export interface PlaylistRow {
   title: string | null;
   channel: string | null;
   created_at: string;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
 }
 
 export interface VideoRow {
@@ -133,6 +135,23 @@ export async function insertNewVideos(
   );
   const results = await db.batch(statements);
   return results.reduce((count, result) => count + (result.meta.changes ?? 0), 0);
+}
+
+/**
+ * Records the outcome of a sync attempt for a playlist — error on failure,
+ * null to clear a previous error on success — so a playlist that's been
+ * silently failing every run is visible without needing to catch it live in
+ * the Worker's console output.
+ */
+export async function recordSyncAttempt(
+  db: D1Database,
+  playlistId: number,
+  error: string | null,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE playlists SET last_synced_at = datetime('now'), last_sync_error = ? WHERE id = ?`)
+    .bind(error, playlistId)
+    .run();
 }
 
 export async function getVideoByVideoId(db: D1Database, videoId: string): Promise<VideoRow | null> {

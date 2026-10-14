@@ -45,6 +45,8 @@ describe("buildWeekColumns / groupVideosByWeek", () => {
         title: "P1",
         channel: "C1",
         created_at: "x",
+        last_synced_at: null,
+        last_sync_error: null,
         videos: [
           video({ id: 1, videoid: "a", published_at: "2026-01-01T00:00:00Z" }),
           video({ id: 2, videoid: "b", published_at: "2026-01-02T00:00:00Z" }),
@@ -57,6 +59,8 @@ describe("buildWeekColumns / groupVideosByWeek", () => {
         title: "P2",
         channel: "C2",
         created_at: "x",
+        last_synced_at: null,
+        last_sync_error: null,
         videos: [video({ id: 3, videoid: "c", published_at: "2026-01-15T00:00:00Z" })],
       },
     ];

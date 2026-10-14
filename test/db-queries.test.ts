@@ -4,11 +4,13 @@ import {
   createPlaylist,
   findCleanupEligibleVideos,
   getExistingVideoIds,
+  getPlaylistById,
   getVideoByVideoId,
   insertNewVideos,
   listVideosForPlaylist,
   recordProgress,
   softDeleteVideos,
+  updatePlaylist,
 } from "../src/db/queries";
 
 async function makePlaylist(youtubePlaylistId: string) {
@@ -114,6 +116,30 @@ describe("findCleanupEligibleVideos", () => {
 
     eligible = await findCleanupEligibleVideos(env.DB, 7);
     expect(eligible.map((v) => v.videoid)).not.toContain("rewatched");
+  });
+});
+
+describe("getPlaylistById / updatePlaylist", () => {
+  it("updates the name, url, and derived youtube playlist id", async () => {
+    const playlist = await makePlaylist("PL_edit");
+
+    const updated = await updatePlaylist(env.DB, playlist.id, {
+      youtubePlaylistId: "PL_edit_new",
+      url: "https://youtube.com/playlist?list=PL_edit_new",
+      title: "Renamed",
+    });
+
+    expect(updated?.title).toBe("Renamed");
+    expect(updated?.youtube_playlist_id).toBe("PL_edit_new");
+
+    const fetched = await getPlaylistById(env.DB, playlist.id);
+    expect(fetched?.title).toBe("Renamed");
+    expect(fetched?.url).toBe("https://youtube.com/playlist?list=PL_edit_new");
+  });
+
+  it("returns null for an unknown playlist id", async () => {
+    const result = await getPlaylistById(env.DB, 999999);
+    expect(result).toBeNull();
   });
 });
 

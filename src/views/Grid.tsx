@@ -56,7 +56,15 @@ export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => 
               const grouped = groupVideosByWeek(playlist);
               return (
                 <tr>
-                  <th>{playlist.title ?? playlist.youtube_playlist_id}</th>
+                  <th>
+                    {playlist.title ?? playlist.youtube_playlist_id}
+                    <span class="playlist-actions">
+                      <a href={`/playlists/${playlist.id}/edit`}>Edit</a>
+                      <a href={playlist.url} target="_blank" rel="noopener noreferrer">
+                        YouTube
+                      </a>
+                    </span>
+                  </th>
                   {weeks.map((week) => (
                     <td>
                       <VideoCell videos={grouped.get(week) ?? []} week={week} />

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listVideosForPlaylist } from "../src/db/queries";
-import { subscribeToPlaylist } from "../src/playlists";
+import { getPlaylistById, listVideosForPlaylist } from "../src/db/queries";
+import { subscribeToPlaylist, updatePlaylistDetails } from "../src/playlists";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
@@ -53,5 +53,33 @@ describe("subscribeToPlaylist", () => {
     // Newest 10 of 0..14 are 5..14.
     const ids = videos.map((v) => v.videoid).sort();
     expect(ids).toEqual(["v10", "v11", "v12", "v13", "v14", "v5", "v6", "v7", "v8", "v9"]);
+  });
+});
+
+describe("updatePlaylistDetails", () => {
+  it("updates the title and re-derives the youtube playlist id from the new url", async () => {
+    const fetchSpy = vi.fn().mockImplementation((input: string) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith("/playlists")) {
+        return Promise.resolve(jsonResponse({ items: [{ snippet: { title: "Old", channelTitle: "Old Channel" } }] }));
+      }
+      return Promise.resolve(jsonResponse({ items: [] }));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const playlist = await subscribeToPlaylist(env.DB, "key", "https://youtube.com/playlist?list=PLold");
+
+    const updated = await updatePlaylistDetails(env.DB, playlist.id, {
+      url: "https://youtube.com/playlist?list=PLnew",
+      title: "New Name",
+    });
+
+    expect(updated.title).toBe("New Name");
+    expect(updated.youtube_playlist_id).toBe("PLnew");
+
+    const fetched = await getPlaylistById(env.DB, playlist.id);
+    expect(fetched?.url).toBe("https://youtube.com/playlist?list=PLnew");
+
+    vi.unstubAllGlobals();
   });
 });

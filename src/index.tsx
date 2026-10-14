@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import type { Bindings } from "./bindings";
 import { PLAYER_SCRIPT } from "./client/player-script";
-import { listPlaylistsWithVideos, recordProgress } from "./db/queries";
+import { getPlaylistById, listPlaylistsWithVideos, recordProgress } from "./db/queries";
 import { runCleanup } from "./jobs/cleanup";
 import { syncAllPlaylists } from "./jobs/sync";
-import { subscribeToPlaylist } from "./playlists";
+import { subscribeToPlaylist, updatePlaylistDetails } from "./playlists";
+import { EditPlaylist } from "./views/EditPlaylist";
 import { Grid } from "./views/Grid";
 import { Layout } from "./views/Layout";
 
@@ -26,6 +27,31 @@ app.post("/playlists", async (c) => {
     return c.text("Missing playlist url", 400);
   }
   await subscribeToPlaylist(c.env.DB, c.env.YOUTUBE_API_KEY, url);
+  return c.redirect("/");
+});
+
+app.get("/playlists/:id/edit", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.text("Invalid playlist id", 400);
+  const playlist = await getPlaylistById(c.env.DB, id);
+  if (!playlist) return c.text("Playlist not found", 404);
+  return c.html(
+    <Layout>
+      <EditPlaylist playlist={playlist} />
+    </Layout>,
+  );
+});
+
+app.post("/playlists/:id/edit", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.text("Invalid playlist id", 400);
+  const body = await c.req.parseBody();
+  const url = body["url"];
+  const title = body["title"];
+  if (typeof url !== "string" || url.length === 0 || typeof title !== "string" || title.length === 0) {
+    return c.text("Missing url or title", 400);
+  }
+  await updatePlaylistDetails(c.env.DB, id, { url, title });
   return c.redirect("/");
 });
 

@@ -22,6 +22,11 @@ export const Layout: FC<PropsWithChildren> = ({ children }) => (
         .video-glyph.done { color: #2a8f4d; }
         form.subscribe { margin-bottom: 1.5rem; display: flex; gap: 0.5rem; }
         form.subscribe input { flex: 1; padding: 0.4rem; }
+        form.edit-playlist { display: flex; flex-direction: column; gap: 0.75rem; max-width: 32rem; }
+        form.edit-playlist label { display: flex; flex-direction: column; gap: 0.25rem; }
+        form.edit-playlist input { padding: 0.4rem; }
+        .playlist-actions { display: block; font-size: 0.75rem; font-weight: 400; margin-top: 0.2rem; }
+        .playlist-actions a { margin-right: 0.6rem; }
       `}</style>
     </head>
     <body>

@@ -88,6 +88,76 @@ describe("POST /playlists", () => {
   });
 });
 
+describe("GET /playlists/:id/edit", () => {
+  it("renders the edit form with the current name and url", async () => {
+    const playlist = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLeditget",
+      url: "https://youtube.com/playlist?list=PLeditget",
+      title: "Edit Me",
+      channel: "Edit Channel",
+    });
+
+    const res = await app.request(`/playlists/${playlist.id}/edit`, {}, env);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('value="Edit Me"');
+    expect(html).toContain('value="https://youtube.com/playlist?list=PLeditget"');
+  });
+
+  it("404s for an unknown playlist", async () => {
+    const res = await app.request("/playlists/999999/edit", {}, env);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /playlists/:id/edit", () => {
+  it("updates the playlist and redirects home", async () => {
+    const playlist = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLeditpost",
+      url: "https://youtube.com/playlist?list=PLeditpost",
+      title: "Before",
+      channel: "Edit Channel",
+    });
+
+    const form = new URLSearchParams({
+      title: "After",
+      url: "https://youtube.com/playlist?list=PLeditpostnew",
+    });
+    const res = await app.request(
+      `/playlists/${playlist.id}/edit`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+
+    const home = await app.request("/", {}, env);
+    const html = await home.text();
+    expect(html).toContain("After");
+  });
+
+  it("rejects a request missing title or url", async () => {
+    const playlist = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLeditbad",
+      url: "https://youtube.com/playlist?list=PLeditbad",
+      title: "Before",
+      channel: "Edit Channel",
+    });
+
+    const res = await app.request(
+      `/playlists/${playlist.id}/edit`,
+      { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "title=Only" },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("POST /api/progress", () => {
   it("records progress for a known video", async () => {
     const playlist = await createPlaylist(env.DB, {

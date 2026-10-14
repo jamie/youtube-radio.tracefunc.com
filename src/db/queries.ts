@@ -51,6 +51,31 @@ export async function listPlaylists(db: D1Database): Promise<PlaylistRow[]> {
   return result.results;
 }
 
+export async function getPlaylistById(db: D1Database, id: number): Promise<PlaylistRow | null> {
+  return db.prepare("SELECT * FROM playlists WHERE id = ?").bind(id).first<PlaylistRow>();
+}
+
+export interface PlaylistUpdate {
+  youtubePlaylistId: string;
+  url: string;
+  title: string;
+}
+
+export async function updatePlaylist(
+  db: D1Database,
+  id: number,
+  update: PlaylistUpdate,
+): Promise<PlaylistRow | null> {
+  return db
+    .prepare(
+      `UPDATE playlists SET youtube_playlist_id = ?, url = ?, title = ?
+       WHERE id = ?
+       RETURNING *`,
+    )
+    .bind(update.youtubePlaylistId, update.url, update.title, id)
+    .first<PlaylistRow>();
+}
+
 export async function listVideosForPlaylist(db: D1Database, playlistId: number): Promise<VideoRow[]> {
   const result = await db
     .prepare("SELECT * FROM videos WHERE playlist_id = ? AND deleted_at IS NULL ORDER BY published_at ASC")

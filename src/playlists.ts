@@ -1,4 +1,4 @@
-import { createPlaylist, insertNewVideos, type PlaylistRow } from "./db/queries";
+import { createPlaylist, insertNewVideos, updatePlaylist, type PlaylistRow } from "./db/queries";
 import { extractPlaylistId, fetchAllPlaylistItems, fetchPlaylistMetadata } from "./youtube/client";
 
 // Matches the Rails app's PlaylistUpdateVideosJob behavior for a brand new
@@ -39,4 +39,24 @@ export async function subscribeToPlaylist(
   );
 
   return playlist;
+}
+
+/**
+ * Updates a playlist's name and/or URL. The URL is re-parsed for its `list`
+ * id so a corrected URL also fixes which playlist the sync job follows, not
+ * just the link shown to the user.
+ */
+export async function updatePlaylistDetails(
+  db: D1Database,
+  id: number,
+  details: { url: string; title: string },
+): Promise<PlaylistRow> {
+  const youtubePlaylistId = extractPlaylistId(details.url);
+  const updated = await updatePlaylist(db, id, {
+    youtubePlaylistId,
+    url: details.url,
+    title: details.title,
+  });
+  if (!updated) throw new Error(`Playlist not found: ${id}`);
+  return updated;
 }

@@ -29,8 +29,11 @@ const VideoCell: FC<{ videos: VideoRow[]; week: string }> = ({ videos, week }) =
   </div>
 );
 
+const playlistLabel = (playlist: PlaylistWithVideos) => playlist.title ?? playlist.youtube_playlist_id;
+
 export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => {
   const weeks = buildWeekColumns(playlists);
+  const sortedPlaylists = [...playlists].sort((a, b) => playlistLabel(a).localeCompare(playlistLabel(b)));
 
   return (
     <div>
@@ -46,25 +49,24 @@ export const Grid: FC<{ playlists: PlaylistWithVideos[] }> = ({ playlists }) => 
           <thead>
             <tr>
               <th>Playlist</th>
+              <th>Links</th>
               {weeks.map((week) => (
                 <th>{formatWeekLabel(week)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {playlists.map((playlist) => {
+            {sortedPlaylists.map((playlist) => {
               const grouped = groupVideosByWeek(playlist);
               return (
                 <tr>
-                  <th>
-                    {playlist.title ?? playlist.youtube_playlist_id}
-                    <span class="playlist-actions">
-                      <a href={`/playlists/${playlist.id}/edit`}>Edit</a>
-                      <a href={playlist.url} target="_blank" rel="noopener noreferrer">
-                        YouTube
-                      </a>
-                    </span>
-                  </th>
+                  <th>{playlistLabel(playlist)}</th>
+                  <td class="playlist-actions">
+                    <a href={`/playlists/${playlist.id}/edit`}>Edit</a>
+                    <a href={playlist.url} target="_blank" rel="noopener noreferrer">
+                      YouTube
+                    </a>
+                  </td>
                   {weeks.map((week) => (
                     <td>
                       <VideoCell videos={grouped.get(week) ?? []} week={week} />

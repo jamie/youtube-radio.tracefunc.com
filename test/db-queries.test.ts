@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   createPlaylist,
   findCleanupEligibleVideos,
+  getAllExistingVideoIds,
   getExistingVideoIds,
   getPlaylistById,
   getVideoByVideoId,
   insertNewVideos,
+  insertNewVideosBatch,
   listVideosForPlaylist,
   recordProgress,
+  recordSyncAttemptsBatch,
   softDeleteVideos,
   updatePlaylist,
 } from "../src/db/queries";
@@ -43,6 +46,52 @@ describe("insertNewVideos / getExistingVideoIds", () => {
 
     const videos = await listVideosForPlaylist(env.DB, playlist.id);
     expect(videos.map((v) => v.videoid)).toEqual(["v1", "v2", "v3"]);
+  });
+});
+
+describe("insertNewVideosBatch / getAllExistingVideoIds", () => {
+  it("inserts for multiple playlists in one batch and groups existing ids by playlist", async () => {
+    const a = await makePlaylist("PL_batch_a");
+    const b = await makePlaylist("PL_batch_b");
+
+    const inserted = await insertNewVideosBatch(env.DB, [
+      { playlistId: a.id, videoId: "a1", title: "A1", publishedAt: "2026-01-01T00:00:00Z" },
+      { playlistId: a.id, videoId: "a2", title: "A2", publishedAt: "2026-01-02T00:00:00Z" },
+      { playlistId: b.id, videoId: "b1", title: "B1", publishedAt: "2026-01-01T00:00:00Z" },
+    ]);
+
+    expect(inserted.get(a.id)).toBe(2);
+    expect(inserted.get(b.id)).toBe(1);
+
+    const existingIds = await getAllExistingVideoIds(env.DB);
+    expect(existingIds.get(a.id)).toEqual(new Set(["a1", "a2"]));
+    expect(existingIds.get(b.id)).toEqual(new Set(["b1"]));
+
+    // Re-inserting the same ids for the wrong playlist's count must not
+    // happen — a repeat batch with one already-known id per playlist
+    // should only count the genuinely new one against each.
+    const secondInserted = await insertNewVideosBatch(env.DB, [
+      { playlistId: a.id, videoId: "a1", title: "A1", publishedAt: "2026-01-01T00:00:00Z" }, // known
+      { playlistId: a.id, videoId: "a3", title: "A3", publishedAt: "2026-01-03T00:00:00Z" }, // new
+      { playlistId: b.id, videoId: "b1", title: "B1", publishedAt: "2026-01-01T00:00:00Z" }, // known
+    ]);
+    expect(secondInserted.get(a.id)).toBe(1);
+    expect(secondInserted.get(b.id) ?? 0).toBe(0);
+  });
+});
+
+describe("recordSyncAttemptsBatch", () => {
+  it("records each playlist's own outcome, not a shared one", async () => {
+    const ok = await makePlaylist("PL_sync_ok");
+    const failed = await makePlaylist("PL_sync_failed");
+
+    await recordSyncAttemptsBatch(env.DB, [
+      { playlistId: ok.id, error: null },
+      { playlistId: failed.id, error: "quota exceeded" },
+    ]);
+
+    expect((await getPlaylistById(env.DB, ok.id))?.last_sync_error).toBeNull();
+    expect((await getPlaylistById(env.DB, failed.id))?.last_sync_error).toBe("quota exceeded");
   });
 });
 

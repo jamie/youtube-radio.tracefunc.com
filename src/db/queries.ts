@@ -113,6 +113,29 @@ export async function getExistingVideoIds(db: D1Database, playlistId: number): P
 }
 
 /**
+ * Same as getExistingVideoIds, but for every playlist in one round trip —
+ * syncing N playlists used to cost N D1 subrequests just for this lookup,
+ * which combined with N playlists' worth of other D1/fetch calls in a
+ * single cron invocation was enough to hit the Worker's per-invocation
+ * subrequest limit (see syncAllPlaylists).
+ */
+export async function getAllExistingVideoIds(db: D1Database): Promise<Map<number, Set<string>>> {
+  const result = await db
+    .prepare("SELECT playlist_id, videoid FROM videos")
+    .all<{ playlist_id: number; videoid: string }>();
+  const byPlaylist = new Map<number, Set<string>>();
+  for (const row of result.results) {
+    let ids = byPlaylist.get(row.playlist_id);
+    if (!ids) {
+      ids = new Set();
+      byPlaylist.set(row.playlist_id, ids);
+    }
+    ids.add(row.videoid);
+  }
+  return byPlaylist;
+}
+
+/**
  * Inserts any videos not already present for this playlist. Uses INSERT OR
  * IGNORE (keyed on the unique `videoid` column) rather than trusting the
  * caller's diff alone, so a race between two syncs can't produce duplicates
@@ -137,6 +160,39 @@ export async function insertNewVideos(
   return results.reduce((count, result) => count + (result.meta.changes ?? 0), 0);
 }
 
+export interface NewVideoForPlaylist extends NewVideo {
+  playlistId: number;
+}
+
+/**
+ * Same idea as insertNewVideos, but inserts for every playlist in a single
+ * batch/subrequest rather than one batch per playlist — see
+ * getAllExistingVideoIds for why that matters. Returns inserted counts per
+ * playlist id, since callers still need that for each playlist's SyncResult.
+ */
+export async function insertNewVideosBatch(
+  db: D1Database,
+  videos: NewVideoForPlaylist[],
+): Promise<Map<number, number>> {
+  const insertedByPlaylist = new Map<number, number>();
+  if (videos.length === 0) return insertedByPlaylist;
+
+  const statements = videos.map((video) =>
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO videos (playlist_id, videoid, title, published_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .bind(video.playlistId, video.videoId, video.title, video.publishedAt),
+  );
+  const results = await db.batch(statements);
+  results.forEach((result, i) => {
+    const { playlistId } = videos[i]!;
+    insertedByPlaylist.set(playlistId, (insertedByPlaylist.get(playlistId) ?? 0) + (result.meta.changes ?? 0));
+  });
+  return insertedByPlaylist;
+}
+
 /**
  * Records the outcome of a sync attempt for a playlist — error on failure,
  * null to clear a previous error on success — so a playlist that's been
@@ -152,6 +208,23 @@ export async function recordSyncAttempt(
     .prepare(`UPDATE playlists SET last_synced_at = datetime('now'), last_sync_error = ? WHERE id = ?`)
     .bind(error, playlistId)
     .run();
+}
+
+/**
+ * Same as recordSyncAttempt, but for every playlist in one batch/subrequest
+ * — see getAllExistingVideoIds for why that matters.
+ */
+export async function recordSyncAttemptsBatch(
+  db: D1Database,
+  attempts: Array<{ playlistId: number; error: string | null }>,
+): Promise<void> {
+  if (attempts.length === 0) return;
+  const statements = attempts.map((attempt) =>
+    db
+      .prepare(`UPDATE playlists SET last_synced_at = datetime('now'), last_sync_error = ? WHERE id = ?`)
+      .bind(attempt.error, attempt.playlistId),
+  );
+  await db.batch(statements);
 }
 
 export async function getVideoByVideoId(db: D1Database, videoId: string): Promise<VideoRow | null> {

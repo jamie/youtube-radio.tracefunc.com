@@ -165,4 +165,56 @@ describe("syncAllPlaylists", () => {
     expect(badRow?.last_sync_error).toContain("403");
     expect(badRow?.last_synced_at).not.toBeNull();
   });
+
+  it("attributes inserted counts to the right playlist when batching across several at once", async () => {
+    // Regression coverage for the batched insert/record path: it keys
+    // results by array index internally, so it's easy to accidentally mix
+    // up which playlist a count belongs to when playlists have different
+    // numbers of new videos.
+    const two = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLtwo",
+      url: "https://youtube.com/playlist?list=PLtwo",
+      title: "Two new",
+      channel: "Two new",
+    });
+    const none = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLnone",
+      url: "https://youtube.com/playlist?list=PLnone",
+      title: "No new",
+      channel: "No new",
+    });
+    const one = await createPlaylist(env.DB, {
+      youtubePlaylistId: "PLone",
+      url: "https://youtube.com/playlist?list=PLone",
+      title: "One new",
+      channel: "One new",
+    });
+
+    fetchSpy.mockImplementation((input: string) => {
+      const playlistId = new URL(input).searchParams.get("playlistId");
+      if (playlistId === "PLtwo") {
+        return Promise.resolve(
+          playlistItemsResponse([
+            { videoId: "two_v1", title: "Two V1", publishedAt: "2026-08-01T00:00:00Z" },
+            { videoId: "two_v2", title: "Two V2", publishedAt: "2026-08-02T00:00:00Z" },
+          ]),
+        );
+      }
+      if (playlistId === "PLnone") {
+        return Promise.resolve(playlistItemsResponse([]));
+      }
+      if (playlistId === "PLone") {
+        return Promise.resolve(
+          playlistItemsResponse([{ videoId: "one_v1", title: "One V1", publishedAt: "2026-08-01T00:00:00Z" }]),
+        );
+      }
+      return Promise.resolve(playlistItemsResponse([]));
+    });
+
+    const results = await syncAllPlaylists(env.DB, "key");
+
+    expect(results.find((r) => r.playlistId === two.id)?.inserted).toBe(2);
+    expect(results.find((r) => r.playlistId === none.id)?.inserted).toBe(0);
+    expect(results.find((r) => r.playlistId === one.id)?.inserted).toBe(1);
+  });
 });

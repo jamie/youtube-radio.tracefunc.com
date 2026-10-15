@@ -27,10 +27,8 @@ export async function syncPlaylist(
   apiKey: string,
   playlist: PlaylistRow,
 ): Promise<SyncResult> {
-  const [items, existingIds] = await Promise.all([
-    fetchAllPlaylistItems(apiKey, playlist.youtube_playlist_id),
-    getExistingVideoIds(db, playlist.id),
-  ]);
+  const existingIds = await getExistingVideoIds(db, playlist.id);
+  const items = await fetchAllPlaylistItems(apiKey, playlist.youtube_playlist_id, existingIds);
 
   const newItems = items.filter((item) => !existingIds.has(item.videoId));
   const inserted = await insertNewVideos(
@@ -63,7 +61,8 @@ export async function syncAllPlaylists(db: D1Database, apiKey: string): Promise<
   const fetches = await Promise.all(
     playlists.map(async (playlist) => {
       try {
-        const items = await fetchAllPlaylistItems(apiKey, playlist.youtube_playlist_id);
+        const knownVideoIds = existingIdsByPlaylist.get(playlist.id) ?? new Set<string>();
+        const items = await fetchAllPlaylistItems(apiKey, playlist.youtube_playlist_id, knownVideoIds);
         return { playlist, items, error: null as string | null };
       } catch (error) {
         return { playlist, items: [], error: error instanceof Error ? error.message : String(error) };

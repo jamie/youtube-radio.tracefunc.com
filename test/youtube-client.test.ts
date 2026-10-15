@@ -196,4 +196,71 @@ describe("fetchAllPlaylistItems", () => {
 
     expect(items.map((item) => item.videoId)).toEqual(["borderline", "new"]);
   });
+
+  it("stops paginating once a page has nothing new to offer", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        nextPageToken: "page2",
+        items: [
+          {
+            snippet: {
+              resourceId: { videoId: "known1" },
+              title: "Already synced",
+              publishedAt: "2026-08-01T00:00:00Z",
+            },
+          },
+        ],
+      }),
+    );
+
+    const items = await fetchAllPlaylistItems("key", "PLxyz", new Set(["known1"]));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(items).toEqual([
+      { videoId: "known1", title: "Already synced", publishedAt: "2026-08-01T00:00:00Z" },
+    ]);
+  });
+
+  it("keeps paginating while a page still has unknown videos", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(
+        jsonResponse({
+          nextPageToken: "page2",
+          items: [
+            {
+              snippet: {
+                resourceId: { videoId: "known1" },
+                title: "Already synced",
+                publishedAt: "2026-08-01T00:00:00Z",
+              },
+            },
+            {
+              snippet: {
+                resourceId: { videoId: "new1" },
+                title: "Brand new episode",
+                publishedAt: "2026-08-02T00:00:00Z",
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            {
+              snippet: {
+                resourceId: { videoId: "known2" },
+                title: "Already synced too",
+                publishedAt: "2026-08-03T00:00:00Z",
+              },
+            },
+          ],
+        }),
+      );
+
+    const items = await fetchAllPlaylistItems("key", "PLxyz", new Set(["known1", "known2"]));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(items.map((item) => item.videoId)).toEqual(["known1", "new1", "known2"]);
+  });
 });

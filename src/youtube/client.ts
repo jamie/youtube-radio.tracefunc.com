@@ -93,10 +93,22 @@ export async function fetchPlaylistMetadata(
  * not assume any particular ordering (newest-first vs. oldest-first is not
  * documented behavior for a channel's uploads playlist) — callers that need
  * "most recent N" should sort the result themselves by `publishedAt`.
+ *
+ * `knownVideoIds` lets a caller short-circuit pagination once nothing new
+ * turns up: for a long-running weekly show (hundreds of episodes, a dozen+
+ * pages), re-walking the entire back catalog on every sync just to filter
+ * almost all of it out by date was blowing the Worker's per-invocation
+ * subrequest limit. Once a full page comes back with every item already in
+ * `knownVideoIds`, every item on a later page is also already known (a
+ * playlist's insertion order is stable run to run even if undocumented), so
+ * there's nothing further pagination could find and the loop stops early.
+ * An empty/omitted `knownVideoIds` (first sync of a new playlist) never
+ * matches this condition, so a new subscription still gets a full backfill.
  */
 export async function fetchAllPlaylistItems(
   apiKey: string,
   playlistId: string,
+  knownVideoIds: Set<string> = new Set(),
 ): Promise<PlaylistItem[]> {
   const items: PlaylistItem[] = [];
   let pageToken: string | undefined;
@@ -110,14 +122,21 @@ export async function fetchAllPlaylistItems(
       ...(pageToken ? { pageToken } : {}),
     });
 
-    for (const item of data.items ?? []) {
-      const videoId = item.snippet?.resourceId?.videoId;
-      const title = item.snippet?.title;
-      const publishedAt = item.snippet?.publishedAt;
+    const pageItems: unknown[] = data.items ?? [];
+    let sawUnknownVideo = false;
+
+    for (const item of pageItems) {
+      const snippet = (item as { snippet?: Record<string, unknown> }).snippet;
+      const videoId = (snippet?.resourceId as { videoId?: string } | undefined)?.videoId;
+      const title = snippet?.title as string | undefined;
+      const publishedAt = snippet?.publishedAt as string | undefined;
       // Deleted/private videos still show up as playlist items but without
       // real snippet data — skip them rather than storing garbage rows.
       if (!videoId || !title || !publishedAt || title === "Deleted video" || title === "Private video") {
         continue;
+      }
+      if (!knownVideoIds.has(videoId)) {
+        sawUnknownVideo = true;
       }
       // publishedAt is always a full ISO 8601 UTC timestamp, so string
       // comparison against MIN_PUBLISHED_AT sorts correctly.
@@ -129,6 +148,8 @@ export async function fetchAllPlaylistItems(
 
     pageToken = data.nextPageToken;
     pages += 1;
+
+    if (pageItems.length > 0 && !sawUnknownVideo) break;
   } while (pageToken && pages < MAX_PAGES);
 
   return items;

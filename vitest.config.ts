@@ -17,6 +17,6 @@ export default defineConfig({
     }),
   ],
   test: {
-    setupFiles: ["./test/apply-migrations.ts"],
+    setupFiles: ["./test/apply-migrations.ts", "./test/fixed-clock.ts"],
   },
 });

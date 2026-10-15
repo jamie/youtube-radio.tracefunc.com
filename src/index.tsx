@@ -85,13 +85,22 @@ export default {
   async scheduled(event, env, ctx) {
     if (event.cron === SYNC_CRON) {
       ctx.waitUntil(
-        syncAllPlaylists(env.DB, env.YOUTUBE_API_KEY).then((results) => {
-          for (const result of results) {
-            if (result.error) {
-              console.error(`sync failed for playlist ${result.playlistId}: ${result.error}`);
+        syncAllPlaylists(env.DB, env.YOUTUBE_API_KEY)
+          .then((results) => {
+            for (const result of results) {
+              if (result.error) {
+                console.error(`sync failed for playlist ${result.playlistId}: ${result.error}`);
+              }
             }
-          }
-        }),
+            const failed = results.filter((result) => result.error).length;
+            const inserted = results.reduce((total, result) => total + result.inserted, 0);
+            console.log(`sync done: ${results.length} playlist(s), ${failed} failed, ${inserted} video(s) inserted`);
+          })
+          .catch((error) => {
+            // A throw here (e.g. from the D1 batch) skips recording any
+            // per-playlist outcome, so this is the only trace it leaves.
+            console.error("sync run failed outright:", error);
+          }),
       );
     } else if (event.cron === CLEANUP_CRON) {
       ctx.waitUntil(

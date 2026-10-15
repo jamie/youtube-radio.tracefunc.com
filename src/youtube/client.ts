@@ -4,11 +4,22 @@ const API_BASE = "https://www.googleapis.com/youtube/v3";
 // so this is 5000 videos — far beyond anything a personal feed subscribes to.
 const MAX_PAGES = 100;
 
-// Hard cap on how far back the crawler will pull: some subscribed playlists
-// (uploads playlists in particular) go back to 2014, far beyond anything
-// meant to show up in a "new episodes" feed. Nothing published before this
-// is ever fetched, for a new subscription or an existing one.
-export const MIN_PUBLISHED_AT = "2026-08-01T00:00:00Z";
+// Rolling cap on how far back the crawler will pull: some subscribed
+// playlists (uploads playlists in particular) go back to 2014, far beyond
+// anything meant to show up in a "new episodes" feed. Nothing published more
+// than this many days ago is ever fetched, for a new subscription or an
+// existing one.
+export const PUBLISHED_WINDOW_DAYS = 30;
+
+/**
+ * The cutoff timestamp for PUBLISHED_WINDOW_DAYS, formatted like the API's
+ * publishedAt (ISO 8601 UTC, no milliseconds) so the two compare correctly
+ * as strings.
+ */
+export function minPublishedAt(now: Date = new Date()): string {
+  const cutoff = new Date(now.getTime() - PUBLISHED_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  return cutoff.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
 
 export class YouTubeApiError extends Error {
   constructor(
@@ -98,12 +109,14 @@ export async function fetchPlaylistMetadata(
  * turns up: for a long-running weekly show (hundreds of episodes, a dozen+
  * pages), re-walking the entire back catalog on every sync just to filter
  * almost all of it out by date was blowing the Worker's per-invocation
- * subrequest limit. Once a full page comes back with every item already in
- * `knownVideoIds`, every item on a later page is also already known (a
- * playlist's insertion order is stable run to run even if undocumented), so
- * there's nothing further pagination could find and the loop stops early.
- * An empty/omitted `knownVideoIds` (first sync of a new playlist) never
- * matches this condition, so a new subscription still gets a full backfill.
+ * subrequest limit. Pagination stops after the first page with no "new"
+ * video — one that's both unknown AND on/after minPublishedAt(). Pre-cutoff
+ * videos must not count as new: they're never stored, so they're never in
+ * `knownVideoIds`, and counting them kept every long-running show walking
+ * its entire history (every subscribed playlist mixes recent episodes with
+ * years of back catalog on page 1). In practice every subscribed playlist
+ * adds new episodes at the top, so this is 1-2 pages per playlist; a first
+ * sync still backfills until it reaches a page with nothing in the window.
  */
 export async function fetchAllPlaylistItems(
   apiKey: string,
@@ -111,6 +124,7 @@ export async function fetchAllPlaylistItems(
   knownVideoIds: Set<string> = new Set(),
 ): Promise<PlaylistItem[]> {
   const items: PlaylistItem[] = [];
+  const cutoff = minPublishedAt();
   let pageToken: string | undefined;
   let pages = 0;
 
@@ -123,7 +137,7 @@ export async function fetchAllPlaylistItems(
     });
 
     const pageItems: unknown[] = data.items ?? [];
-    let sawUnknownVideo = false;
+    let sawNewVideo = false;
 
     for (const item of pageItems) {
       const snippet = (item as { snippet?: Record<string, unknown> }).snippet;
@@ -135,13 +149,13 @@ export async function fetchAllPlaylistItems(
       if (!videoId || !title || !publishedAt || title === "Deleted video" || title === "Private video") {
         continue;
       }
-      if (!knownVideoIds.has(videoId)) {
-        sawUnknownVideo = true;
-      }
       // publishedAt is always a full ISO 8601 UTC timestamp, so string
-      // comparison against MIN_PUBLISHED_AT sorts correctly.
-      if (publishedAt < MIN_PUBLISHED_AT) {
+      // comparison against the cutoff sorts correctly.
+      if (publishedAt < cutoff) {
         continue;
+      }
+      if (!knownVideoIds.has(videoId)) {
+        sawNewVideo = true;
       }
       items.push({ videoId, title, publishedAt });
     }
@@ -149,8 +163,9 @@ export async function fetchAllPlaylistItems(
     pageToken = data.nextPageToken;
     pages += 1;
 
-    if (pageItems.length > 0 && !sawUnknownVideo) break;
+    if (pageItems.length > 0 && !sawNewVideo) break;
   } while (pageToken && pages < MAX_PAGES);
 
+  console.log(`playlistItems ${playlistId}: fetched ${pages} page(s), ${items.length} item(s) in window`);
   return items;
 }

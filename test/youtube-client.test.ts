@@ -3,7 +3,7 @@ import {
   extractPlaylistId,
   fetchAllPlaylistItems,
   fetchPlaylistMetadata,
-  MIN_PUBLISHED_AT,
+  minPublishedAt,
   YouTubeApiError,
 } from "../src/youtube/client";
 
@@ -25,6 +25,12 @@ describe("extractPlaylistId", () => {
 
   it("throws when there is no list param", () => {
     expect(() => extractPlaylistId("https://www.youtube.com/watch?v=abc")).toThrow();
+  });
+});
+
+describe("minPublishedAt", () => {
+  it("is 30 days before now, formatted like the API's publishedAt", () => {
+    expect(minPublishedAt(new Date("2026-10-15T12:34:56.789Z"))).toBe("2026-09-15T12:34:56Z");
   });
 });
 
@@ -163,7 +169,7 @@ describe("fetchAllPlaylistItems", () => {
     ]);
   });
 
-  it("skips videos published before MIN_PUBLISHED_AT", async () => {
+  it("skips videos published before the rolling cutoff", async () => {
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
         items: [
@@ -178,7 +184,7 @@ describe("fetchAllPlaylistItems", () => {
             snippet: {
               resourceId: { videoId: "borderline" },
               title: "Right on the cutoff",
-              publishedAt: MIN_PUBLISHED_AT,
+              publishedAt: minPublishedAt(),
             },
           },
           {
@@ -262,5 +268,73 @@ describe("fetchAllPlaylistItems", () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(items.map((item) => item.videoId)).toEqual(["known1", "new1", "known2"]);
+  });
+
+  it("doesn't count pre-cutoff videos as new when deciding whether to keep paginating", async () => {
+    // Mirrors real long-running shows: page 1 has recent episodes mixed in
+    // with years-old back catalog that is never stored, so it's never "known".
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        nextPageToken: "page2",
+        items: [
+          {
+            snippet: {
+              resourceId: { videoId: "known1" },
+              title: "Already synced",
+              publishedAt: "2026-08-01T00:00:00Z",
+            },
+          },
+          {
+            snippet: {
+              resourceId: { videoId: "ancient" },
+              title: "Back catalog",
+              publishedAt: "2019-03-01T00:00:00Z",
+            },
+          },
+        ],
+      }),
+    );
+
+    const items = await fetchAllPlaylistItems("key", "PLxyz", new Set(["known1"]));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(items.map((item) => item.videoId)).toEqual(["known1"]);
+  });
+
+  it("stops after a page of only pre-cutoff videos even on a first sync", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(
+        jsonResponse({
+          nextPageToken: "page2",
+          items: [
+            {
+              snippet: {
+                resourceId: { videoId: "new1" },
+                title: "Brand new episode",
+                publishedAt: "2026-09-01T00:00:00Z",
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          nextPageToken: "page3",
+          items: [
+            {
+              snippet: {
+                resourceId: { videoId: "ancient" },
+                title: "Back catalog",
+                publishedAt: "2019-03-01T00:00:00Z",
+              },
+            },
+          ],
+        }),
+      );
+
+    const items = await fetchAllPlaylistItems("key", "PLxyz");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(items.map((item) => item.videoId)).toEqual(["new1"]);
   });
 });

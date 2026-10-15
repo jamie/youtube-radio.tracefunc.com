@@ -111,11 +111,13 @@ Key decisions baked into this code:
 
 - **Fresh start, no data migration** from the Rails app's SQLite database.
   Re-subscribing to a playlist seeds it with the 10 most recent videos.
-- **No ordering assumption** is made about the YouTube Data API's
-  `playlistItems.list` response (undocumented for a channel's uploads
-  playlist) — every sync fetches the whole playlist and diffs against
-  known video IDs, rather than trying to detect "new videos" from item
-  order or stopping pagination early.
+- **Pagination stops at the first page with nothing new** (no video that's
+  both unknown and published within the last 30 days — see
+  `PUBLISHED_WINDOW_DAYS`). Walking every playlist's
+  full history blew the Workers free plan's 50-subrequest-per-invocation
+  cap. Every subscribed playlist adds new episodes at the top, so a sync
+  costs 1–2 `playlistItems` pages per playlist. A playlist that appends new
+  episodes at the *bottom* would never sync under this rule.
 - **Cleanup is a hard delete**, not a soft-hide — once a video is ≥95%
   watched and hasn't been touched in 7 days, its row is gone for good.
 - **The 7-day grace clock runs off `last_watched_at`**, not off when a

@@ -27,7 +27,7 @@ describe("subscribeToPlaylist", () => {
           jsonResponse({ items: [{ snippet: { title: "ASOT", channelTitle: "Armin van Buuren" } }] }),
         );
       }
-      // 15 videos, published one day apart (all after the MIN_PUBLISHED_AT
+      // 15 videos, published one day apart (all inside the rolling publish
       // cutoff) — only the newest 10 should be kept.
       const items = Array.from({ length: 15 }, (_, i) => ({
         snippet: {

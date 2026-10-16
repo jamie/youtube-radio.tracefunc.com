@@ -14,6 +14,56 @@ export const PLAYER_SCRIPT = `
   var currentPlaylistId = null;
   var progressTimer = null;
 
+  // Videos this browser couldn't play (e.g. blocked by YouTube Restricted
+  // Mode on a work network). Kept in localStorage rather than the database
+  // on purpose: being blocked is a property of the machine/network, not of
+  // the video, so another machine should still auto-play it.
+  var UNAVAILABLE_STORAGE_KEY = "unavailableVideoIds";
+  // YT onError codes that mean "this video can't play here": 100 removed or
+  // private, 101/150 embedding disallowed, 151 seen for Restricted Mode.
+  // Not 2 (bad parameter), 5 (HTML5 player error) or 153 (missing referrer)
+  // — those are our setup's fault and would mark every video in turn.
+  var UNAVAILABLE_ERROR_CODES = [100, 101, 150, 151];
+
+  function readUnavailable() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(UNAVAILABLE_STORAGE_KEY) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeUnavailable(map) {
+    try {
+      localStorage.setItem(UNAVAILABLE_STORAGE_KEY, JSON.stringify(map));
+    } catch (e) {
+      // Storage blocked/full — the skip just won't persist past this page.
+    }
+  }
+
+  function setUnavailable(videoId, unavailable) {
+    var map = readUnavailable();
+    if (unavailable) {
+      map[videoId] = new Date().toISOString();
+    } else {
+      delete map[videoId];
+    }
+    writeUnavailable(map);
+    var el = findVideoElement(videoId);
+    if (el) el.classList.toggle("unavailable", unavailable);
+  }
+
+  function applyUnavailableMarkers() {
+    var map = readUnavailable();
+    var elements = document.querySelectorAll(".video[data-video-id]");
+    for (var i = 0; i < elements.length; i++) {
+      if (map[elements[i].getAttribute("data-video-id")]) {
+        elements[i].classList.add("unavailable");
+      }
+    }
+  }
+
   function loadVideo(videoId, startSeconds, playlistId) {
     if (!playerReady) {
       pendingLoad = { videoId: videoId, startSeconds: startSeconds, playlistId: playlistId };
@@ -29,11 +79,13 @@ export const PLAYER_SCRIPT = `
   // what's currently playing so we don't just binge one show back-to-back.
   function pickNextVideo() {
     var buckets = {};
+    var unavailable = readUnavailable();
     var elements = document.querySelectorAll(".video[data-video-id]");
     for (var i = 0; i < elements.length; i++) {
       var el = elements[i];
       var glyph = el.querySelector(".video-glyph");
       if (glyph && glyph.classList.contains("done")) continue;
+      if (unavailable[el.getAttribute("data-video-id")]) continue;
       var week = el.getAttribute("data-week");
       if (!week) continue;
       var entry = {
@@ -136,6 +188,11 @@ export const PLAYER_SCRIPT = `
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
     if (event.data === 1) {
+      // Played fine after all (clicked manually, or from a different
+      // network than when it was marked) — make it eligible again.
+      if (currentVideoId && readUnavailable()[currentVideoId]) {
+        setUnavailable(currentVideoId, false);
+      }
       stopProgressTimer();
       progressTimer = setInterval(function () {
         reportProgress(false);
@@ -156,6 +213,14 @@ export const PLAYER_SCRIPT = `
     }
   }
 
+  function onPlayerError(event) {
+    console.warn("YouTube player error " + event.data + " for video " + currentVideoId);
+    if (!currentVideoId || UNAVAILABLE_ERROR_CODES.indexOf(event.data) === -1) return;
+    stopProgressTimer();
+    setUnavailable(currentVideoId, true);
+    playNext();
+  }
+
   window.onYouTubeIframeAPIReady = function () {
     player = new YT.Player("player", {
       height: "390",
@@ -169,9 +234,12 @@ export const PLAYER_SCRIPT = `
           }
         },
         onStateChange: onPlayerStateChange,
+        onError: onPlayerError,
       },
     });
   };
+
+  applyUnavailableMarkers();
 
   document.addEventListener("click", function (event) {
     var target = event.target.closest("[data-video-id]");

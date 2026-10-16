@@ -20,6 +20,7 @@ export const Layout: FC<PropsWithChildren> = ({ children }) => (
         .video-glyph.unwatched { color: #bbb; }
         .video-glyph.in-progress { color: #d18b00; }
         .video-glyph.done { color: #2a8f4d; }
+        .video.unavailable .video-glyph { color: #c0392b; opacity: 0.5; text-decoration: line-through; }
         form.subscribe { margin-bottom: 1.5rem; display: flex; gap: 0.5rem; }
         form.subscribe input { flex: 1; padding: 0.4rem; }
         form.edit-playlist { display: flex; flex-direction: column; gap: 0.75rem; max-width: 32rem; }
